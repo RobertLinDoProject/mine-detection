@@ -4,6 +4,68 @@
 
 `config/class_map.json` 是 `class_id` 到 `class_name` 的唯一對照來源。服務啟動時會驗證權重與類別表的類別數是否一致。
 
+## 從零開始
+
+以下流程預設使用者的電腦尚未下載本專案，也尚未建立 Python 虛擬環境。
+
+### 1. 安裝前置工具
+
+先安裝 [Git](https://git-scm.com/downloads)，並選擇下列其中一種執行方式：
+
+- 本機 Python：安裝 Python 3.11 或 3.12。
+- Docker：安裝 Docker Desktop 或 Docker Engine，不需要另外建立 Python 環境。
+
+GPU 不是必要條件。沒有可用的 NVIDIA CUDA GPU 時，服務會自動使用 CPU，但推論速度會較慢。
+
+### 2. 下載專案
+
+```powershell
+git clone https://github.com/RobertLinDoProject/mine-detection.git
+cd mine-detection
+```
+
+接著確認 API 必要檔案存在：
+
+```powershell
+Test-Path .\weights\best.pt
+Test-Path .\config\class_map.json
+```
+
+兩行都應顯示 `True`。`weights/best.pt` 是 API 實際使用的權重；服務不會自動下載遺失的權重。
+
+Linux 或 macOS 可使用：
+
+```bash
+test -f weights/best.pt && echo "weights OK"
+test -f config/class_map.json && echo "class map OK"
+```
+
+### 3. 安裝並啟動
+
+選擇其中一種方式：
+
+- 使用 Python：依照「本機執行」章節建立虛擬環境並啟動。
+- 使用 Docker：依照「Docker」章節建置 image 並啟動 container。
+
+所有指令都應在包含 `README.md`、`app/`、`config/` 與 `weights/` 的專案根目錄執行。
+
+### 4. 確認服務可用
+
+服務啟動後，另外開啟一個終端機：
+
+```powershell
+curl.exe http://localhost:8000/health
+curl.exe http://localhost:8000/metadata
+```
+
+`/health` 應回傳：
+
+```json
+{"status":"ok","model_loaded":true}
+```
+
+接著可開啟 `http://localhost:8000/docs`，直接透過 Swagger UI 測試 API，或依照下方「curl 測試」章節上傳圖片。
+
 ## 專案結構
 
 ```text
@@ -18,8 +80,7 @@ mine-detection/
 │   ├── test_api.py          # API 與圖片上傳驗收測試
 │   └── test_detector.py     # 模型啟動、裝置及偵測結果測試
 ├── weights/
-│   ├── best.pt              # 推論服務使用的 YOLOv8 權重
-│   └── last.pt              # 訓練流程保留的最後一版權重
+│   └── best.pt              # 推論服務使用的 YOLOv8 權重
 ├── Dockerfile               # Docker image 建置與服務啟動設定
 ├── requirements.txt         # 正式執行環境相依套件
 ├── requirements-dev.txt     # 測試環境額外相依套件
@@ -46,14 +107,29 @@ mine-detection/
 
 ## 本機執行
 
-建議使用 Python 3.11 或 3.12：
+建議使用 Python 3.11 或 3.12。以下命令須在專案根目錄執行。
+
+Windows PowerShell：
 
 ```powershell
+python --version
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+上述方式不需要執行 `Activate.ps1`，因此不會受到 PowerShell Execution Policy 阻擋。
+
+Linux 或 macOS：
+
+```bash
+python3 --version
+python3 -m venv .venv
+source .venv/bin/activate
 python -m pip install --upgrade pip
-pip install -r requirements.txt
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+python -m pip install -r requirements.txt
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 服務啟動後可開啟 `http://localhost:8000/docs`。
@@ -119,30 +195,30 @@ curl -X POST "http://localhost:8000/v1/detect?conf=0.25&iou=0.45" \
 
 ### 回應基本資訊
 
-| 欄位 | 說明 |
-|---|---|
-| `model_name` | 模型名稱，目前為 `mine-yolo-v8` |
-| `model_version` | 模型／API 定義版本 |
-| `image_filename` | 上傳圖片的原始檔名 |
-| `image_width` | 圖片寬度，單位為 pixel |
-| `image_height` | 圖片高度，單位為 pixel |
-| `confidence_threshold` | 本次推論使用的信心門檻 |
-| `iou_threshold` | 本次 NMS 使用的 IoU 門檻 |
-| `latency_ms` | 模型 `predict` 執行時間，單位為毫秒，不包含圖片上傳時間 |
-| `warnings` | 非致命問題的警告訊息 |
-| `detections` | 偵測到的物件陣列；沒有符合條件的物件時為空陣列 |
+| 欄位                   | 說明                                                    |
+| ---------------------- | ------------------------------------------------------- |
+| `model_name`           | 模型名稱，目前為 `mine-yolo-v8`                         |
+| `model_version`        | 模型／API 定義版本                                      |
+| `image_filename`       | 上傳圖片的原始檔名                                      |
+| `image_width`          | 圖片寬度，單位為 pixel                                  |
+| `image_height`         | 圖片高度，單位為 pixel                                  |
+| `confidence_threshold` | 本次推論使用的信心門檻                                  |
+| `iou_threshold`        | 本次 NMS 使用的 IoU 門檻                                |
+| `latency_ms`           | 模型 `predict` 執行時間，單位為毫秒，不包含圖片上傳時間 |
+| `warnings`             | 非致命問題的警告訊息                                    |
+| `detections`           | 偵測到的物件陣列；沒有符合條件的物件時為空陣列          |
 
 ### 每筆 detection
 
-| 欄位 | 說明 |
-|---|---|
-| `detection_id` | 本次回應內的流水編號，從 `1` 開始 |
-| `class_id` | 模型輸出的類別編號 |
-| `class_name` | 根據 `config/class_map.json` 查到的類別名稱 |
-| `confidence` | 模型對該筆偵測的信心分數，範圍為 `0.0` 至 `1.0` |
-| `bbox_xyxy` | Bounding box 的像素座標，包含 `x1`、`y1`、`x2`、`y2` |
+| 欄位              | 說明                                                              |
+| ----------------- | ----------------------------------------------------------------- |
+| `detection_id`    | 本次回應內的流水編號，從 `1` 開始                                 |
+| `class_id`        | 模型輸出的類別編號                                                |
+| `class_name`      | 根據 `config/class_map.json` 查到的類別名稱                       |
+| `confidence`      | 模型對該筆偵測的信心分數，範圍為 `0.0` 至 `1.0`                   |
+| `bbox_xyxy`       | Bounding box 的像素座標，包含 `x1`、`y1`、`x2`、`y2`              |
 | `bbox_normalized` | 將 bounding box 除以圖片寬高後的正規化座標，範圍為 `0.0` 至 `1.0` |
-| `area_px` | Bounding box 面積，單位為平方像素 |
+| `area_px`         | Bounding box 面積，單位為平方像素                                 |
 
 ## 驗收測試
 
@@ -184,3 +260,45 @@ docker run --rm --gpus all --name mine-detection-api -p 8000:8000 mine-detection
 ```powershell
 docker run --rm --name mine-detection-api -p 8000:8000 mine-detection:latest
 ```
+
+container 啟動後同樣使用 `http://localhost:8000` 呼叫 API。可執行以下命令查看啟動紀錄：
+
+```powershell
+docker logs mine-detection-api
+```
+
+## 常見問題
+
+### 啟動時顯示找不到 `weights/best.pt`
+
+確認目前位於專案根目錄，並執行：
+
+```powershell
+git status
+git pull
+Test-Path .\weights\best.pt
+```
+
+API 不會自動下載模型；`weights/best.pt` 必須實際存在。
+
+### PowerShell 不允許執行 `Activate.ps1`
+
+不需要修改 Execution Policy。直接使用 `.\.venv\Scripts\python.exe` 執行安裝與啟動命令即可。
+
+### API 使用 CPU 而不是 GPU
+
+先呼叫 `GET /metadata` 查看 `device`。只有 PyTorch 能辨識 CUDA 時才會使用 `cuda:0`，否則會自動 fallback 到 `cpu`。
+
+### Port 8000 已被占用
+
+本機執行時可改用其他 port，例如：
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8001
+```
+
+之後請將呼叫網址改為 `http://localhost:8001`。
+
+## 對外部署注意事項
+
+目前 API 沒有 API Key、登入驗證、TLS 與明確的上傳檔案大小限制。若要開放至校外或公網，應先在反向代理或 API Gateway 加入 HTTPS、身分驗證、請求大小限制與流量限制。
