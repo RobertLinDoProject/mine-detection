@@ -184,3 +184,4 @@ docker run --rm --gpus all --name mine-detection-api -p 8000:8000 mine-detection
 ```powershell
 docker run --rm --name mine-detection-api -p 8000:8000 mine-detection:latest
 ```
+## 此處不直接提供訓練後模型權重 ，若需要請連絡專案相關人員，聯絡資訊: bobmonster99@gmail.com
